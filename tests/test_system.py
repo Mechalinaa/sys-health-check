@@ -1,3 +1,4 @@
+import math
 from unittest.mock import patch
 
 import pytest
@@ -28,3 +29,23 @@ def test_check_memory_all(mock_vm, value, expected):
 
     assert result.status == expected
     assert result.value == value
+
+
+@patch("healthcheck.checks.system.psutil.virtual_memory")
+def test_check_memory_returns_unknown_on_psutil_oserror(mock_vm):
+    mock_vm.side_effect = OSError("Cannot read /proc/meminfo")
+    result = check_memory(warn=80, crit=90)
+
+    assert result.name == "memory"
+    assert result.status == Status.UNKNOWN
+    assert math.isnan(result.value)
+    assert "/proc/meminfo" in result.message
+
+
+@patch("healthcheck.checks.system.psutil.virtual_memory")
+def test_check_memory_invalid_thresholds(mock_vm):
+    mock_vm.return_value.percent = 67
+    with pytest.raises(
+        ValueError, match="Warning threshold can't be greater than or equal to critical"
+    ):
+        check_memory(warn=80, crit=80)
